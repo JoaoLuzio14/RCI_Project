@@ -2,3 +2,7 @@ Dados do Servidor
 
 IP: 139.136.138.142
 UDP port: 59000
+
+Dados Maquina:
+
+IP: 
