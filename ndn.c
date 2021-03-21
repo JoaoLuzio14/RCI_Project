@@ -38,10 +38,6 @@ int main(int argc, char **argv){
 	/* TCP Server Variables */	
 
 	/* Argument Process */	
-	printf("Number of arguments: %d\n", argc);
-	for(i=0; i<argc; i++){
-		printf("%s: %s\n", argvector[i], argv[i]);
-	}
 	/*
 	if(argc < 3){
 		printf("Invalid number of arguments. Very few arguments inserted.\nThe ideal executable command is: 'ndn IP TCP regIP regUDP'\n");
