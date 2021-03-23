@@ -88,6 +88,8 @@ int main(int argc, char **argv){
 	printf("Node Interface:\n");
 	while(1){
 		printf(">>> ");
+		fflush(stdout);
+		/* User  */
 		if(fgets(user_str, 64, stdin)!= NULL){
 			errcode = sscanf(user_str, "%s", cmd);
 			if(errcode != 1) continue;
@@ -134,13 +136,15 @@ int main(int argc, char **argv){
 
    			case 3:
    				printf("\tShutting down all connections and closing the node...\n");
-   				// Shut Down Connections Here
-   				printf("\tSucess! Node shut down.\n");
+   				if(joined == 1){
+   					joined = regNODE(0, fd, net, nodeIP, nodeTCP, &(res->ai_addr), res->ai_addrlen);
+   				}
    				endFLAG = 1;
+   				if((endFLAG = 1) && (joined == 0)) printf("\tSucess! Node shut down.\n");
    				break;
 
    			default:
-   				printf("\tInvalid command.\n");
+   				printf("\tInvalid or unknown command: %s\n", cmd);
    				break;
    		}
    		if(endFLAG == 1) break;
@@ -158,6 +162,9 @@ int regNODE(int regFLAG, int fd, char* net, char* nodeIP, char* nodeTCP, struct 
 	struct sockaddr addr;
 	socklen_t addrlen;
 	char buffer[128+1];
+
+	memset(str, '0', sizeof(str));
+	memset(auxstr, '0', sizeof(auxstr));
 
 	if(regFLAG == 1) strcpy(str, "REG ");
 	else if(regFLAG == 0) strcpy(str, "UNREG ");

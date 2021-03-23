@@ -51,6 +51,7 @@ void msg_build(char* msg, char* net, char* ndIP, char* TCP){
 	strcat(msg, ndIP);
 	strcat(msg, " ");
 	strcat(msg, TCP);
+  strcat(msg, "\0");
 }
 
 int val_number(char *str){

@@ -10,4 +10,4 @@ Perguntas:
 
 Necessario verificar se o o IP do no ja esta registado na rede?
 
-O mesmo no pode estar simultaneamente ligado a diversas redes?
+O mesmo no pode estar simultaneamente ligado a diversas redes? (Respondido)
