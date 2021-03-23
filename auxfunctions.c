@@ -17,12 +17,15 @@
 #include <errno.h>
 #include "ndn.h"
 
-int check_ip(char *full_ip){
+int check_ip(char *full_ip){ // INCOMPLETO!!!
 	int i, num, dots = 0;
-  char *ptr;
+  char *ptr, aux[20];
 
-  if(full_ip == NULL) return 0;
-  ptr = strtok(full_ip, ".");
+  if((full_ip[0] == '.') || (full_ip[strlen(full_ip)-1] == '.')) return 0;
+
+  strcpy(aux, full_ip);
+  if(aux == NULL) return 0;
+  ptr = strtok(aux, ".");
   if(ptr == NULL) return 0;
   while(ptr){
     if(!val_number(ptr)) return 0;

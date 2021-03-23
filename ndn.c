@@ -28,8 +28,7 @@ int main(int argc, char **argv){
 
 	/* Common Variables */
 	int i, errcode, endFLAG = 0;
-	char argvector[5][8] = {"Name", "IP", "TCP", "regIP", "regUDP"}; // Desired Arguments Description
-	char nodeIP[20], nodeTCP[20];
+	char nodeIP[20], nodeTCP[20], regIP[20], regUDP[20];
 
 	/* User Interface Variables */
 	char user_str[64], cmd[64], net[64], nodeID[64], bootIP[64], bootTCP[64];
@@ -49,29 +48,43 @@ int main(int argc, char **argv){
 
 	/* Argument Process */	
 
-	/*
+
 	if(argc < 3){
-		printf("Invalid number of arguments. Very few arguments inserted.\nThe ideal executable command is: 'ndn IP TCP regIP regUDP'.\n");
+		printf("Invalid number of arguments. Very few arguments inserted.\nTypical usage: 'ndn IP TCP regIP regUDP'.\n");
 		exit(1);
 	}
 	else if(argc > 5){
-		printf("Invalid number of arguments. Too many arguments inserted.\nThe ideal executable command is: 'ndn IP TCP regIP regUDP'.\n ");
+		printf("Invalid number of arguments. Too many arguments inserted.\nTypical usage: 'ndn IP TCP regIP regUDP'.\n ");
+		exit(1);
 	}
 	else if(argc == 3){
 		printf("Valid number of arguments. Some arguments might have been ommited and some values will be set by deafault.\n");
+		strcpy(regIP, DEFAULT_IP);
+		strcpy(regUDP, DEFAULT_PORT);
 	}
 	else if(argc == 4){
 		printf("Valid number of arguments. Some arguments might have been ommited and some values will be set by deafault.\n");
+		strcpy(regIP, argv[3]);
+		strcpy(regUDP, DEFAULT_PORT);
 	}
 	else if(argc == 5){
 		printf("Valid number of arguments.\n");
-		printf("Arguments are valid.\n");
+		strcpy(regIP, argv[3]);
+		strcpy(regUDP, argv[4]);
 	}
-	*/
 	
-	/* Arguments converted to general variables */
 	strcpy(nodeIP, argv[1]);
 	strcpy(nodeTCP, argv[2]);
+	if((check_ip(nodeIP) == 0) || (check_ip(regIP) == 0)){
+		printf("Error in IP format verification.\n");
+		exit(1);
+	}
+	if((atoi(regUDP) < 0) || (atoi(regUDP) > 65535)){
+		printf("Error specifying UDP port.\n");
+		exit(1);
+	}
+	printf("Arguments are valid.\n\n\n\n\n");
+
 
 	/* UDP Node Server Connection Setup */
 	fd = socket(AF_INET, SOCK_DGRAM, 0); // UDP socket
@@ -81,7 +94,7 @@ int main(int argc, char **argv){
 	hints.ai_family = AF_INET; // IPv4
 	hints.ai_socktype = SOCK_DGRAM; // UDP socket
 
-	errcode = getaddrinfo(DEFAULT_HOST, DEFAULT_PORT, &hints, &res);
+	errcode = getaddrinfo(DEFAULT_HOST, regUDP, &hints, &res);
 	if(errcode != 0) exit(1);
 	
 	/* User Interface */
@@ -89,7 +102,7 @@ int main(int argc, char **argv){
 	while(1){
 		printf(">>> ");
 		fflush(stdout);
-		/* User  */
+		
 		if(fgets(user_str, 64, stdin)!= NULL){
 			errcode = sscanf(user_str, "%s", cmd);
 			if(errcode != 1) continue;
@@ -163,14 +176,15 @@ int regNODE(int regFLAG, int fd, char* net, char* nodeIP, char* nodeTCP, struct 
 	socklen_t addrlen;
 	char buffer[128+1];
 
-	memset(str, '0', sizeof(str));
-	memset(auxstr, '0', sizeof(auxstr));
+	str[0] = '\0';
+	auxstr[0] = '\0';
 
 	if(regFLAG == 1) strcpy(str, "REG ");
 	else if(regFLAG == 0) strcpy(str, "UNREG ");
 
    	msg_build(auxstr, net, nodeIP, nodeTCP);
    	strcat(str, auxstr);
+   	// printf("%s\n", str);
    	n = sendto(fd, str, strlen(str), 0, *ai_addr, ai_addrlen);
 	if(n == -1) exit(1);
 					
@@ -178,6 +192,7 @@ int regNODE(int regFLAG, int fd, char* net, char* nodeIP, char* nodeTCP, struct 
 	n = recvfrom(fd, buffer, strlen(buffer)-1, 0, &addr, &addrlen);
 	if(n == -1) exit(1);
 	buffer[n] = '\0';
+	// printf("%s\n", buffer);
 
 	if(regFLAG == 1){
 		if(strcmp(buffer, "OKREG") == 0){
