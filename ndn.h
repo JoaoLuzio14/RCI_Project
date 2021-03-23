@@ -11,6 +11,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+typedef struct Node{
+	char node_ip[64];
+	char node_TCP[64];
+}node_info;
+
+
 int check_ip(char *full_ip);
 int get_cmd(char *cmd);
 int val_number(char *str);

@@ -18,6 +18,7 @@
 #include <errno.h>
 #include "ndn.h"
 
+#define DEFAULT_HOST "tejo.tecnico.ulisboa.pt"
 #define DEFAULT_IP "139.136.138.142"
 #define DEFAULT_PORT "59000"
 
@@ -34,24 +35,27 @@ int main(int argc, char **argv){
 	char user_str[64], cmd[64], net[64], nodeID[64], bootIP[64], bootTCP[64];
 	int cmd_code, joined = 0;
 
+	/* Node Topology Variables */
+	node_info extern_node, backup_node;
+
 	/* UDP Server Variables */
 	struct addrinfo hints, *res;
 	struct in_addr addr;
 	int fd;
 	ssize_t n;
 	char buffer[128+1];
-	struct hostent *node_server_host;
 
 	/* TCP Server Variables */	
 
 	/* Argument Process */	
+
 	/*
 	if(argc < 3){
-		printf("Invalid number of arguments. Very few arguments inserted.\nThe ideal executable command is: 'ndn IP TCP regIP regUDP'\n");
+		printf("Invalid number of arguments. Very few arguments inserted.\nThe ideal executable command is: 'ndn IP TCP regIP regUDP'.\n");
 		exit(1);
 	}
 	else if(argc > 5){
-		printf("Invalid number of arguments. Too many arguments inserted.\nThe ideal executable command is: 'ndn IP TCP regIP regUDP'\n ");
+		printf("Invalid number of arguments. Too many arguments inserted.\nThe ideal executable command is: 'ndn IP TCP regIP regUDP'.\n ");
 	}
 	else if(argc == 3){
 		printf("Valid number of arguments. Some arguments might have been ommited and some values will be set by deafault.\n");
@@ -64,15 +68,10 @@ int main(int argc, char **argv){
 		printf("Arguments are valid.\n");
 	}
 	*/
+	
 	/* Arguments converted to general variables */
 	strcpy(nodeIP, argv[1]);
 	strcpy(nodeTCP, argv[2]);
-
-	/*
-	inet_aton(argv[3], &addr);
-	node_server_host = gethostbyaddr((const void *)&addr, sizeof(addr), AF_INET);
-	printf("Host Name: %s\n", node_server_host->h_name);
-	*/
 
 	/* UDP Node Server Connection Setup */
 	fd = socket(AF_INET, SOCK_DGRAM, 0); // UDP socket
@@ -82,13 +81,13 @@ int main(int argc, char **argv){
 	hints.ai_family = AF_INET; // IPv4
 	hints.ai_socktype = SOCK_DGRAM; // UDP socket
 
-	errcode = getaddrinfo("tejo.tecnico.ulisboa.pt", "59000", &hints, &res);
+	errcode = getaddrinfo(DEFAULT_HOST, DEFAULT_PORT, &hints, &res);
 	if(errcode != 0) exit(1);
 	
 	/* User Interface */
 	printf("Node Interface:\n");
 	while(1){
-		printf(">>>");
+		printf(">>> ");
 		if(fgets(user_str, 64, stdin)!= NULL){
 			errcode = sscanf(user_str, "%s", cmd);
 			if(errcode != 1) continue;
@@ -104,7 +103,7 @@ int main(int argc, char **argv){
 
    				errcode = sscanf(user_str, "%s %s %s %s %s", cmd, net, nodeID, bootIP, bootTCP);
    				if((errcode != 3) && (errcode != 5)){
-   					printf("\tInvalid command syntax.\n");
+   					printf("\tInvalid command syntax. The ideal executable command is: 'join net id bootIP bootTCP'.\n");
    					break;
    				}
    				else{
