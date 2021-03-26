@@ -16,7 +16,7 @@ typedef struct Node{
 	char node_TCP[64];
 }node_info;
 
-
+/* auxfunctions */
 int check_ip(char *full_ip);
 int get_cmd(char *cmd);
 int val_number(char *str);

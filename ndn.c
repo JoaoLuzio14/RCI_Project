@@ -19,7 +19,7 @@
 #include "ndn.h"
 
 #define DEFAULT_HOST "tejo.tecnico.ulisboa.pt"
-#define DEFAULT_IP "139.136.138.142"
+#define DEFAULT_IP "193.136.138.142"
 #define DEFAULT_PORT "59000"
 
 int regNODE(int regFLAG, int fd, char* net, char* nodeIP, char* nodeTCP, struct sockaddr** ai_addr, socklen_t ai_addrlen);
@@ -94,8 +94,10 @@ int main(int argc, char **argv){
 	hints.ai_family = AF_INET; // IPv4
 	hints.ai_socktype = SOCK_DGRAM; // UDP socket
 
-	errcode = getaddrinfo(DEFAULT_HOST, regUDP, &hints, &res);
-	if(errcode != 0) exit(1);
+	if((errcode = getaddrinfo(regIP, regUDP, &hints, &res)) != 0){
+		fprintf(stderr,"error: getaddrinfo: %s\n", gai_strerror (errcode));
+		exit(1);
+	}
 	
 	/* User Interface */
 	printf("Node Interface:\n");
