@@ -24,7 +24,7 @@
 typedef struct Node{
 	char node_ip[20];
 	char node_TCP[8];
-}node_info;
+}contact;
 
 /* auxfunctions */
 int check_ip(char *full_ip);
@@ -34,5 +34,6 @@ void msg_build(char* msg, char* net, char* ndIP, char* TCP);
 
 /* connectivity */
 int regNODE(int regFLAG, char* net, char* nodeIP, char* nodeTCP, char* regIP, char* regUDP);
+int getEXT(char* net, char* regIP, char* regUDP, char* bootIP, char* bootTCP);
 
 #endif // NDN_H_INCLUDED

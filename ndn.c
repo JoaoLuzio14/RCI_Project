@@ -35,11 +35,11 @@ int main(int argc, char **argv){
 
 	/* User Interface Variables */
 	char user_str[64], cmd[64], net[64], nodeID[64], bootIP[64], bootTCP[64];
-	int cmd_code, joined = 0;
+	int fd, cmd_code, joined = 0;
 
 
 	/* Node Topology Variables */
-	node_info extern_node, backup_node;
+	contact extern_node, backup_node;
 
 	/* TCP Server Variables */	
 	struct addrinfo hints, *res;
@@ -73,7 +73,7 @@ int main(int argc, char **argv){
 		strcpy(regIP, argv[3]);
 		strcpy(regUDP, argv[4]);
 	}
-	
+
 	strcpy(nodeIP, argv[1]);
 	strcpy(nodeTCP, argv[2]);
 	if((check_ip(nodeIP) == 0) || (check_ip(regIP) == 0)){
@@ -162,19 +162,32 @@ int main(int argc, char **argv){
 					   					break;
 					   				}
 
-					   				if(errcode == 3){ // Indirect Join
-
-					   				}
-					   				else if(errcode == 5){ // Direct Join
-
-					   				}
-
 					   				errcode = sscanf(user_str, "%s %s %s %s %s", cmd, net, nodeID, bootIP, bootTCP);
 					   				if((errcode != 3) && (errcode != 5)){
 					   					printf("\tInvalid command syntax. The ideal executable command is: 'join net id bootIP bootTCP'.\n");
 					   					break;
 					   				}
 					   				else{
+						   				if(errcode == 3){ // Indirect Join
+						   					if(getEXT(net, regIP, regUDP, bootIP, bootTCP) == -1) break;
+						   				}
+						   				if(errcode == 5){ // Direct Join
+						   					if(check_ip(bootIP) == 0){
+												printf("Error in IP format verification.\n");
+												break;
+											}
+											if((atoi(bootTCP) < 0) || (atoi(bootTCP) > 65535)){
+												printf("Error specifying TCP port.\n");
+												break;
+											}
+						   				}
+										strcpy(extern_node.node_ip, bootIP);
+										strcpy(extern_node.node_TCP, bootTCP);
+
+										if((extern_node.node_ip != NULL) && (extern_node.node_TCP != NULL)){ // Connect to external neighbour
+											// connect to external neighbour
+										}
+
 					   					joined = regNODE(1, net, nodeIP, nodeTCP, regIP, regUDP);
 					   					if(joined == 0) break;
 					   					else if(joined == 1) state = reg;
@@ -197,6 +210,7 @@ int main(int argc, char **argv){
 
 				case reg:
 					if(FD_ISSET(0, &ready_sockets)){
+						
 						FD_CLR(0, &ready_sockets);
 						if(fgets(user_str, 64, stdin)!= NULL){
 
@@ -220,8 +234,9 @@ int main(int argc, char **argv){
 					   				if(joined == 1) break;
 					   				else if(joined == 0) state = unreg;
 
-					   				memset(net, '0', sizeof(net));
+					   				memset(net, '\0', sizeof(net));
 					   				break;
+
 					   			case 3: // exit
 					   				printf("\tShutting down all connections and closing the node...\n");
 					   				if(joined == 1){
@@ -231,11 +246,23 @@ int main(int argc, char **argv){
 					   				if((state == getout) && (joined == 0)) printf("\tSucess! Node shut down.\n");
 					   				break;
 
+					   			case 4: // show topology
+					   				if(extern_node.node_ip == NULL){
+					   					printf("\tThe node is alone\n");
+					   				}
+					   				printf("\tEXTERNAL NEIGHBOUR: %s %s\n", extern_node.node_ip, extern_node.node_TCP);
+					   				printf("\tBACKUP NEIGHBOUR: %s %s\n", backup_node.node_ip, backup_node.node_TCP);
+					   				break;
+
 					   			default:
 					   				printf("\tNode already joined a net!\n");
 					   				break;
 					   		}				
 						}
+					}
+					else if(FD_ISSET(fd_server, &ready_sockets)){
+						FD_CLR(fd_server, &ready_sockets);
+						// check new connection to the server
 					}
 					break;
 

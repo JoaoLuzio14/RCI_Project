@@ -45,6 +45,7 @@ int get_cmd(char *cmd){
 	if(strcmp(cmd, "join") == 0) return 1;
 	if(strcmp(cmd, "leave") == 0) return 2;
 	if(strcmp(cmd, "exit") == 0) return 3;
+  if(strcmp(cmd, "st") == 0) return 4;
 	else return 0;
 }
 
