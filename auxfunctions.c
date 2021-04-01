@@ -17,7 +17,7 @@
 #include <errno.h>
 #include "ndn.h"
 
-int check_ip(char *full_ip){ // INCOMPLETO!!!
+int check_ip(char *full_ip){
 	int i, num, dots = 0;
   char *ptr, aux[20];
 

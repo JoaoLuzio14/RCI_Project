@@ -2,7 +2,7 @@
  *
  * File Name: ndn.c
  * Autor:  G19 (RCI 20/21) - João Luzio (IST193096) & José Reis (IST193105)
- * Last Review: 22 Mar 2021
+ * Last Review: 31 Mar 2021
  *
  *****************************************************************************/
 #include <stdio.h>
@@ -19,6 +19,7 @@
 #include <errno.h>
 #include "ndn.h"
 
+#define max(A,B) ((A)>=(B)?(A):(B))
 #define DEFAULT_HOST "tejo.tecnico.ulisboa.pt"
 #define DEFAULT_IP "193.136.138.142"
 #define DEFAULT_PORT "59000"
@@ -28,9 +29,9 @@ int main(int argc, char **argv){
 	/* Common Variables */
 	int i, errcode, endFLAG = 0;
 	char nodeIP[20], nodeTCP[20], regIP[20], regUDP[20];
-	fd_set current_sockets, ready_sockets;
+	fd_set ready_sockets;
 	enum {unreg, reg, getout} state;
-	int maxfd, counter;
+	int maxfd, cntr;
 
 	/* User Interface Variables */
 	char user_str[64], cmd[64], net[64], nodeID[64], bootIP[64], bootTCP[64];
@@ -40,14 +41,12 @@ int main(int argc, char **argv){
 	/* Node Topology Variables */
 	node_info extern_node, backup_node;
 
-	/* UDP Server Variables */
+	/* TCP Server Variables */	
 	struct addrinfo hints, *res;
 	struct in_addr addr;
 	ssize_t n;
 	char buffer[128+1];
-
-	/* TCP Server Variables */	
-	int fd_TCP;
+	int fd_server;
 
 	/* Argument Process */	
 	printf("\n");
@@ -87,79 +86,168 @@ int main(int argc, char **argv){
 	}
 	printf("Arguments are valid.\n\n\n\n\n");
 
-	/* TCP Server Connection Setup */
+	/* TCP Server Connection */
 
-	/* Save UDP socket fd */
-	FD_ZERO(&current_sockets);
-	// FD_SET(fd_TCP, &current_sockets);
-	
+	if((fd_server=socket(AF_INET,SOCK_STREAM,0))==-1)exit(1); //TCP type of socket
+
+	memset(&hints,0,sizeof hints);
+	hints.ai_family=AF_INET;		//IPv4
+	hints.ai_socktype=SOCK_STREAM;  //TCP socket
+	hints.ai_flags=AI_PASSIVE;
+
+	if((errcode=getaddrinfo(NULL, nodeTCP, &hints, &res))!=0) 
+		fprintf(stderr,"TCP error: getaddrinfo: %s\n",gai_strerror(errcode));
+ 
+	if (bind(fd_server, res->ai_addr, res->ai_addrlen)==1){
+		printf("Error registering server address with the system (bind)");
+		exit(1);
+	}
+	if (listen(fd_server, 10) == -1){
+		printf("Error in instructing the kernal to accept incoming connections (listen)");
+	}
+
 	/* User Interface */
-	state = unreg;
-	printf("Node Interface:\n");
-	while(1){
-		ready_sockets = current_sockets; // because select is destructive
 
-		printf(">>> ");
+	state = unreg; // Inicial State Defined
+	printf("Node Interface:\n");
+
+	while(1){
+
+		printf(">>> "); // Command Line Prompt
 		fflush(stdout);
-		
-		if(fgets(user_str, 64, stdin)!= NULL){
-			errcode = sscanf(user_str, "%s", cmd);
-			if(errcode != 1) continue;
-			cmd_code = get_cmd(cmd); // Get command code
+
+		FD_ZERO(&ready_sockets);
+		switch(state){
+			case unreg: 
+				FD_SET(0, &ready_sockets);
+				maxfd = 0;
+				break;
+			case reg:
+				FD_SET(0, &ready_sockets);
+				FD_SET(fd_server, &ready_sockets);
+				maxfd = max(0, fd_server);
+				break;
+			case getout: 
+				endFLAG = 1;
+				break;
+		}
+		if(endFLAG == 1) break;
+
+		cntr = select(maxfd + 1, &ready_sockets, (fd_set *)NULL, (fd_set *)NULL, (struct timeval *)NULL);
+		if(cntr <= 0){
+			printf("Error: Unexpected (select)!\n");
+			exit(1);
 		}
 
-   		switch(cmd_code){
-   			case 1:
-   				if(joined != 0){ // Already joined?
-   					printf("\tNode already joined a net!\n");
+		for(; cntr; --cntr){
+			switch(state){
+				case unreg:
+					if(FD_ISSET(0, &ready_sockets)){
+						FD_CLR(0, &ready_sockets);
+						if(fgets(user_str, 64, stdin)!= NULL){
+
+							if(sscanf(user_str, "%s", cmd) == 1){
+								cmd_code = get_cmd(cmd); // Get command code
+							}
+							else break;
+
+							switch(cmd_code){
+								case 0: // unknown
+									printf("\tInvalid or unknown command: %s\n", cmd);
+					   				break;
+
+					   			case 1: // join
+					   				if(joined != 0){ // Already joined?
+					   					printf("\tNode already joined a net!\n");
+					   					break;
+					   				}
+
+					   				if(errcode == 3){ // Indirect Join
+
+					   				}
+					   				else if(errcode == 5){ // Direct Join
+
+					   				}
+
+					   				errcode = sscanf(user_str, "%s %s %s %s %s", cmd, net, nodeID, bootIP, bootTCP);
+					   				if((errcode != 3) && (errcode != 5)){
+					   					printf("\tInvalid command syntax. The ideal executable command is: 'join net id bootIP bootTCP'.\n");
+					   					break;
+					   				}
+					   				else{
+					   					joined = regNODE(1, net, nodeIP, nodeTCP, regIP, regUDP);
+					   					if(joined == 0) break;
+					   					else if(joined == 1) state = reg;
+					   				}
+
+					   				break;
+
+					   			case 3: // exit
+					   				state = getout;
+					   				if((state == getout) && (joined == 0)) printf("\tSucess! Node shut down.\n");
+					   				break;
+
+					   			default:
+					   				printf("\tNode does not have joined any net yet!\n");
+					   				break;
+					   		}				
+						}
+					}
+					break;
+
+				case reg:
+					if(FD_ISSET(0, &ready_sockets)){
+						FD_CLR(0, &ready_sockets);
+						if(fgets(user_str, 64, stdin)!= NULL){
+
+							if(sscanf(user_str, "%s", cmd) == 1){
+								cmd_code = get_cmd(cmd); // Get command code
+							}
+							else break;
+
+							switch(cmd_code){
+								case 0: // unknown
+									printf("\tInvalid or unknown command: %s\n", cmd);
+					   				break;
+
+					   			case 2: // leave
+					   				if(joined != 1){ // Not joined yet?
+					   					printf("\tNode does not have joined any net!\n");
+					   					break;
+					   				}
+
+					   				joined = regNODE(0, net, nodeIP, nodeTCP, regIP, regUDP);
+					   				if(joined == 1) break;
+					   				else if(joined == 0) state = unreg;
+
+					   				memset(net, '0', sizeof(net));
+					   				break;
+					   			case 3: // exit
+					   				printf("\tShutting down all connections and closing the node...\n");
+					   				if(joined == 1){
+					   					joined = regNODE(0, net, nodeIP, nodeTCP, regIP, regUDP);
+					   				}
+					   				state = getout;
+					   				if((state == getout) && (joined == 0)) printf("\tSucess! Node shut down.\n");
+					   				break;
+
+					   			default:
+					   				printf("\tNode already joined a net!\n");
+					   				break;
+					   		}				
+						}
+					}
+					break;
+
+				case getout: break;
+
+				default:
+					printf("\tInvalid state: %d\n", state);
    					break;
-   				}
-
-   				errcode = sscanf(user_str, "%s %s %s %s %s", cmd, net, nodeID, bootIP, bootTCP);
-   				if((errcode != 3) && (errcode != 5)){
-   					printf("\tInvalid command syntax. The ideal executable command is: 'join net id bootIP bootTCP'.\n");
-   					break;
-   				}
-   				else{
-   					joined = regNODE(1, net, nodeIP, nodeTCP, regIP, regUDP);
-   					if(joined == 0) break;
-   				}
-
-   				if(errcode == 3){ // Indirect Join
-
-   				}
-   				else if(errcode == 5){ // Direct Join
-
-   				}
-
-   				break;
-
-   			case 2:
-   				if(joined != 1){ // Not joined yet?
-   					printf("\tNode does not have joined any net!\n");
-   					break;
-   				}
-
-   				joined = regNODE(0, net, nodeIP, nodeTCP, regIP, regUDP);
-   				if(joined == 1) break;
-
-   				memset(net, '0', sizeof(net));
-   				break;
-
-   			case 3:
-   				printf("\tShutting down all connections and closing the node...\n");
-   				if(joined == 1){
-   					joined = regNODE(0, net, nodeIP, nodeTCP, regIP, regUDP);
-   				}
-   				endFLAG = 1;
-   				if((endFLAG = 1) && (joined == 0)) printf("\tSucess! Node shut down.\n");
-   				break;
-
-   			default:
-   				printf("\tInvalid or unknown command: %s\n", cmd);
-   				break;
-   		}
-   		if(endFLAG == 1) break;
+			}
+		}
 	}
+	freeaddrinfo(res);
+	close(fd_server);
 	exit(0);
 }
