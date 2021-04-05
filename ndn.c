@@ -46,8 +46,8 @@ int main(int argc, char **argv){
 	contact extern_node, backup_node;
 
 	/* TCP Server Variables */	
-	struct addrinfo hints, *res;
-	struct in_addr addr;
+	struct addrinfo hints, *res, *p;
+	struct in_addr addr, *addraux;
 	socklen_t addrlen;
 	ssize_t n;
 	char buffer[128+1];
@@ -193,8 +193,16 @@ int main(int argc, char **argv){
 										strcpy(extern_node.node_ip, bootIP);
 										strcpy(extern_node.node_tcp, bootTCP);
 
-										if((bootIP[0] != '\0') && (bootTCP[0] != '\0')){ // Connect to external neighbour
+										if((extern_node.node_ip[0] != '\0') && (extern_node.node_tcp[0] != '\0')){ // Connect to external neighbour
 											fd = tcp_connection(extern_node.node_ip, extern_node.node_tcp);
+
+											bzero(buffer, sizeof(buffer));
+											sprintf(buffer, "NEW %s %s", nodeIP, nodeTCP);
+											n = write(fd, buffer, sizeof(buffer));
+											if(n <= 0){
+												printf("\tError sending node info!\n");
+												break;
+											}
 
 											FD_ZERO(&rfds);
 											FD_SET(fd, &rfds);
@@ -208,6 +216,10 @@ int main(int argc, char **argv){
 
 											bzero(buffer, sizeof(buffer));
 											n = read(fd, buffer, sizeof(buffer));
+											if(n <= 0){
+												printf("\tError receiving node info!\n");
+												break;
+											}
 
 											if((sscanf(buffer, "%s %s %s", user_str, backup_node.node_ip, backup_node.node_tcp) != 3) || (strcmp(user_str, "EXTERN") != 0) || (n <= 0)){
 												printf("\t%s\n", buffer);
@@ -284,7 +296,7 @@ int main(int argc, char **argv){
 					   				break;
 
 					   			case 4: // show topology
-					   				if(extern_node.node_ip == NULL){
+					   				if(extern_node.node_ip[0] == '\0'){
 					   					printf("\tThe node is alone in the net.\n");
 					   					break;
 					   				}
@@ -307,33 +319,48 @@ int main(int argc, char **argv){
 					else if(FD_ISSET(fd_server, &ready_sockets)){
 						FD_CLR(fd_server, &ready_sockets);
 
-						addrlen_tcp=sizeof(addr_tcp);
+						addrlen_tcp = sizeof(addr_tcp);
 						if((fd = accept(fd_server, &addr_tcp, &addrlen_tcp)) == -1) exit(1);
 
-						if(extern_node.node_ip == NULL){
-							strcpy(extern_node.node_ip, addr_tcp.sa_data);
-							if((errcode = getnameinfo(&addr_tcp, addrlen_tcp, host, sizeof(host), service, sizeof(service), 0)) != 0){
-								fprintf(stderr,"error: getnameinfo: %s\n",gai_strerror(errcode));
-								exit(1);
-							}
-							strcpy(extern_node.node_tcp, service);
+						FD_ZERO(&rfds);
+						FD_SET(fd, &rfds);
+
+						counter = select(fd+1, &rfds, (fd_set*)NULL, (fd_set*)NULL, &tv);
+						if(counter <= 0){
+							printf("\tError establishing connection with internal neighbour node!\n");
+							close(fd);
+							break;
+						}
+
+						bzero(buffer, sizeof(buffer));
+						n = read(fd, buffer, sizeof(buffer));
+						if(n <= 0){
+							printf("\tError receiving node info!\n");
+							break;
+						}
+
+						bootIP[0] = '\0';
+						bootTCP[0] = '\0';
+						if((sscanf(buffer, "%s %s %s", user_str, bootIP, bootTCP) != 3) || (strcmp(user_str, "NEW") != 0) || (n <= 0)){
+							printf("\t%s\n", buffer);
+							printf("\tError getting external neighbour node information.\n");
+							close(fd);
+							break;
+						}
+						else if(extern_node.node_ip[0] == '\0'){
+							strcpy(extern_node.node_ip, bootIP);
+							strcpy(extern_node.node_tcp, bootTCP);
 							strcpy(backup_node.node_ip, nodeIP);
 							strcpy(backup_node.node_tcp, nodeTCP);
 						}
 
-						// printf("%s\n", extern_node.node_ip);
-						// printf("%s\n", extern_node.node_tcp);
-
 						bzero(buffer, sizeof(buffer));
-						user_str[0] = '\0';
-						strcpy(buffer, "EXTERN ");
-						extern_msg_build(user_str, extern_node.node_ip, extern_node.node_tcp);
-						strcat(buffer, user_str);
-
-						// printf("%s\n", buffer);
-
+						sprintf(buffer, "EXTERN %s %s", extern_node.node_ip, extern_node.node_tcp);
 						n = write(fd, buffer, sizeof(buffer));
-
+						if(n <= 0){
+							printf("\tError sending node info!\n");
+							break;
+						}
 						// send new connection my expedition table
 					}
 					break;

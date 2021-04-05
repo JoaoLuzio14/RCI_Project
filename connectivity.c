@@ -55,7 +55,7 @@ int regNODE(int regFLAG, char* net, char* nodeIP, char* nodeTCP, char* regIP, ch
 	fd_set rfds;
 	struct timeval tv;
 
-	tv.tv_sec = 5;
+	tv.tv_sec = 2;
     tv.tv_usec = 0;
 
     /* UDP node server connection */
@@ -82,7 +82,7 @@ int regNODE(int regFLAG, char* net, char* nodeIP, char* nodeTCP, char* regIP, ch
 	if(regFLAG == 1) strcpy(str, "REG ");
 	else if(regFLAG == 0) strcpy(str, "UNREG ");
 
-   	reg_msg_build(auxstr, net, nodeIP, nodeTCP);
+	sprintf(auxstr, "%s %s %s", net, nodeIP, nodeTCP);
    	strcat(str, auxstr);
    	// printf("%s\n", str);
    	n = sendto(fd, str, strlen(str), 0, res->ai_addr, res->ai_addrlen);

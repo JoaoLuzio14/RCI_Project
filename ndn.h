@@ -30,8 +30,6 @@ typedef struct Node{
 int check_ip(char *full_ip);
 int get_cmd(char *cmd);
 int val_number(char *str);
-void reg_msg_build(char* msg, char* net, char* ndIP, char* TCP);
-void extern_msg_build(char* msg, char* extIP, char* extTCP);
 
 /* connectivity */
 int tcp_connection(char* bootIP, char* bootTCP);
