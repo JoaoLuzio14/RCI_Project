@@ -56,3 +56,18 @@ int val_number(char *str){
   }
   return 1;
 }
+
+int table_in(nodeinfo *head, nodeinfo *new){ // Zedagaita
+
+  return -1;
+}
+
+int table_out(nodeinfo *head, char *node_id){ // Buzio
+
+  return -1;
+}
+
+int table_free(nodeinfo *head){ // Zedagaita
+
+  return -1;
+}

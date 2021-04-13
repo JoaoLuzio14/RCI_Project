@@ -45,6 +45,9 @@ int main(int argc, char **argv){
 	/* Node Topology Variables */
 	contact extern_node, backup_node;
 
+	/* Expedition Tables Variables */
+	nodeinfo *head_table, *new_table;
+
 	/* TCP Server Variables */	
 	struct addrinfo hints, *res, *p;
 	struct in_addr addr, *addraux;
@@ -227,12 +230,17 @@ int main(int argc, char **argv){
 												close(fd);
 												break;
 											}
-											else{
-												// receive data and fill my expedition table!
-											}
+
 											// then advertise myself :D
 										}
 
+										// Start Expedition Table
+										head_table = (nodeinfo*)calloc(1, sizeof(nodeinfo));
+										strcpy(head_table->id, nodeID);
+										head_table->fd = NULL;
+										head_table->next = (nodeinfo*)NULL;
+
+										// Register Node in Node Server
 					   					joined = regNODE(1, net, nodeIP, nodeTCP, regIP, regUDP);
 					   					if(joined == 0) break;
 					   					else if(joined == 1) state = reg;

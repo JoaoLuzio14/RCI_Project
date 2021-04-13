@@ -26,10 +26,19 @@ typedef struct Node{
 	char node_tcp[8];
 }contact;
 
+typedef struct Expedition{
+	char id[10];
+	int fd;
+	nodeinfo *next;
+}nodeinfo;
+
 /* auxfunctions */
 int check_ip(char *full_ip);
 int get_cmd(char *cmd);
 int val_number(char *str);
+int table_in(nodeinfo *head, nodeinfo *new);
+int table_out(nodeinfo *head, char *node_id);
+int table_free(nodeinfo *head);
 
 /* connectivity */
 int tcp_connection(char* bootIP, char* bootTCP);
