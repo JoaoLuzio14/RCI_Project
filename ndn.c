@@ -28,7 +28,7 @@ int main(int argc, char **argv){
 
 	/* Common Variables */
 	int i, errcode, endFLAG = 0;
-	char nodeIP[20], nodeTCP[20], regIP[20], regUDP[20];
+	char nodeIP[20], nodeTCP[20], regIP[20], regUDP[20], *ptr;
 	fd_set ready_sockets;
 	enum {unreg, reg, busy, getout} state;
 	int maxfd, cntr;
@@ -36,11 +36,11 @@ int main(int argc, char **argv){
 	/* User Interface Variables */
 	char user_str[64], cmd[64], net[64], nodeID[64], bootIP[64], bootTCP[64];
 	int fd, cmd_code, counter, joined = 0;
-	char host[NI_MAXHOST], service[NI_MAXSERV]; // consts in <netdb.h>
 	struct sockaddr addr_tcp;
 	socklen_t addrlen_tcp;
 	fd_set rfds;
 	struct timeval tv;
+	struct sigaction act;
 
 	/* Node Topology Variables */
 	contact extern_node, backup_node;
@@ -121,24 +121,27 @@ int main(int argc, char **argv){
 
 	/* User Interface */
 	state = unreg; // Inicial State Defined
+	// SIGPIPE Ignore
+	memset(&act,0,sizeof act);
+	act.sa_handler=SIG_IGN;
+	if(sigaction(SIGPIPE,&act,NULL)==-1) exit(1);
+	// Command Line Prompt
 	printf("Node Interface:\n");
-
-	printf(">>> "); // Command Line Prompt
+	printf(">>> ");
 	fflush(stdout);
 
 	while(1){
-
 		FD_ZERO(&ready_sockets);
 		switch(state){
-			case unreg: 
+			case unreg: // Node not registered
 				FD_SET(0, &ready_sockets);
 				maxfd = 0;
 				break;
-			case busy:
+			case busy: // Waiting to receive information from new connection
 				FD_SET(fd, &ready_sockets);
 				maxfd = fd;
 				break;
-			case reg:
+			case reg: // Node fully operational
 				FD_SET(0, &ready_sockets);
 				FD_SET(fd_server, &ready_sockets);
 				maxfd = max(0, fd_server);
@@ -151,7 +154,7 @@ int main(int argc, char **argv){
 					aux_table = (nodeinfo *)aux_table->next;
 				}
 				break;
-			case getout: 
+			case getout: // Exit from the Application
 				endFLAG = 1;
 				break;
 		}
@@ -159,15 +162,19 @@ int main(int argc, char **argv){
 
 		if(state == busy){
 			cntr = select(maxfd + 1, &ready_sockets, (fd_set *)NULL, (fd_set *)NULL, &tv);
+			if(cntr <= 0){
+				printf("\tError: Did not received advertise form internal neighbour!\n");
+				state = reg;
+				continue;
+			}
 		}
 		else{
 			cntr = select(maxfd + 1, &ready_sockets, (fd_set *)NULL, (fd_set *)NULL, (struct timeval *)NULL);
+			if(cntr <= 0){
+				printf("\tError: Unexpected (select)!\n");
+				exit(1);
+			}
 		}
-		if(cntr <= 0){
-			printf("Error: Unexpected (select)!\n");
-			exit(1);
-		}
-
 		/* Nodes Connected Messages Processing */	
 		if(state == reg){
 			aux_table = head_table;
@@ -177,7 +184,7 @@ int main(int argc, char **argv){
 					cntr--;
 
 					bzero(buffer, sizeof(buffer));
-					n = read(aux_table->fd, buffer, sizeof(buffer));
+					n = read(fd, buffer, sizeof(buffer));
 					if(n <= 0){
 						printf("\tError receiving a message from a neighbour node!\n");
 						break;
@@ -189,7 +196,6 @@ int main(int argc, char **argv){
 					}
 					else continue;
 
-					printf("\t%d\n", cmd_code);
 					switch(cmd_code){
 						case 1:
 							// Update Expedition Table
@@ -232,7 +238,7 @@ int main(int argc, char **argv){
 							printf("\tError receiving a message from a neighbour node!\n");
 							break;
 						}
-						
+							
 						bzero(cmd, sizeof(cmd));
 						if((sscanf(buffer, "%s", cmd) == 1) && (strcmp(cmd, "ADVERTISE") == 0)){
 							// Update Expedition Table
@@ -344,7 +350,6 @@ int main(int argc, char **argv){
 												printf("\tError sending node info!\n");
 												break;
 											}
-
 										}
 
 										// Start Expedition Table
@@ -356,9 +361,11 @@ int main(int argc, char **argv){
 										// Register Node in Node Server
 					   					joined = regNODE(1, net, nodeIP, nodeTCP, regIP, regUDP);
 					   					if(joined == 0) break;
-					   					else if(joined == 1) state = reg;
+					   					else if(joined == 1){
+					   						if(extern_node.node_ip[0] != '\0') state = busy;
+					   						else state  = reg;
+					   					}
 					   				}
-
 					   				break;
 
 					   			case 3: // exit
@@ -499,7 +506,6 @@ int main(int argc, char **argv){
 						// send new connection my expedition table
 						aux_table = head_table;
 						while(aux_table != NULL){
-							if(aux_table->fd != 0){
 								bzero(buffer, sizeof(buffer));
 								sprintf(buffer, "ADVERTISE %s\n", aux_table->id);
 								n = write(fd, buffer, sizeof(buffer));
@@ -507,7 +513,6 @@ int main(int argc, char **argv){
 									printf("\tError sending expedition table!\n");
 									break;
 								}
-							}
 							aux_table = (nodeinfo*)aux_table->next;
 						}
 						state = busy;
@@ -522,7 +527,6 @@ int main(int argc, char **argv){
 			}
 		}
 	}
-	close(fd); // remove later!
 
 	freeaddrinfo(res);
 	close(fd_server);

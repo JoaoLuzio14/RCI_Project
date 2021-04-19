@@ -107,6 +107,7 @@ int table_free(nodeinfo *head){
   if(aux1 != NULL) aux2 = (nodeinfo *)head->next;
 
   while(aux1->next!=NULL){
+    if(aux1->fd != 0) close(aux1->fd);
     free(aux1);
     aux1 = aux2;
     aux2 = (nodeinfo*)aux2->next;
