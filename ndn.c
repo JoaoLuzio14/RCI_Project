@@ -30,7 +30,7 @@ int main(int argc, char **argv){
 	int i, errcode, endFLAG = 0;
 	char nodeIP[20], nodeTCP[20], regIP[20], regUDP[20];
 	fd_set ready_sockets;
-	enum {unreg, reg, getout} state;
+	enum {unreg, reg, busy, getout} state;
 	int maxfd, cntr;
 
 	/* User Interface Variables */
@@ -134,6 +134,10 @@ int main(int argc, char **argv){
 				FD_SET(0, &ready_sockets);
 				maxfd = 0;
 				break;
+			case busy:
+				FD_SET(fd, &ready_sockets);
+				maxfd = fd;
+				break;
 			case reg:
 				FD_SET(0, &ready_sockets);
 				FD_SET(fd_server, &ready_sockets);
@@ -153,7 +157,12 @@ int main(int argc, char **argv){
 		}
 		if(endFLAG == 1) break;
 
-		cntr = select(maxfd + 1, &ready_sockets, (fd_set *)NULL, (fd_set *)NULL, (struct timeval *)NULL);
+		if(state == busy){
+			cntr = select(maxfd + 1, &ready_sockets, (fd_set *)NULL, (fd_set *)NULL, &tv);
+		}
+		else{
+			cntr = select(maxfd + 1, &ready_sockets, (fd_set *)NULL, (fd_set *)NULL, (struct timeval *)NULL);
+		}
 		if(cntr <= 0){
 			printf("Error: Unexpected (select)!\n");
 			exit(1);
@@ -165,15 +174,47 @@ int main(int argc, char **argv){
 			while(aux_table != NULL){
 				if((aux_table->fd != 0) && (FD_ISSET(aux_table->fd, &ready_sockets))){
 					FD_CLR(aux_table->fd, &ready_sockets);
-			
+					cntr--;
+
 					bzero(buffer, sizeof(buffer));
-					n = read(fd, buffer, sizeof(buffer));
+					n = read(aux_table->fd, buffer, sizeof(buffer));
 					if(n <= 0){
 						printf("\tError receiving a message from a neighbour node!\n");
 						break;
 					}
-					cntr--;
-					// Process Messages
+					
+					bzero(cmd, sizeof(cmd));
+					if(sscanf(buffer, "%s", cmd) == 1){
+						cmd_code = get_msg(cmd); // Get command code
+					}
+					else continue;
+
+					printf("\t%d\n", cmd_code);
+					switch(cmd_code){
+						case 1:
+							// Update Expedition Table
+							new_table = (nodeinfo*)calloc(1, sizeof(nodeinfo));
+							sscanf(buffer, "%s %s", user_str, new_table->id);
+							new_table->fd = aux_table->fd;
+							new_table->next = NULL;
+							errcode = table_in(head_table, new_table);
+							// Propagate the Message
+							new_table = head_table;
+							while(new_table != NULL){
+								if((new_table->fd != 0) && (new_table->fd != aux_table->fd)){
+									n = write(aux_table->fd, buffer, sizeof(buffer));
+									if(n <= 0){
+										printf("\tError sending message!\n");
+										break;
+									}
+								}
+								new_table = (nodeinfo*)new_table->next;
+							}
+							break;
+						default: // Unknown Message Received
+							break;
+					}
+
 				}
 				aux_table = (nodeinfo *)aux_table->next;
 			}		
@@ -181,11 +222,47 @@ int main(int argc, char **argv){
 		/* Server and User Messages Processing */
 		for(; cntr; --cntr){
 			switch(state){
+				case busy:
+					if(FD_ISSET(fd, &ready_sockets)){
+						FD_CLR(fd, &ready_sockets);
+
+						bzero(buffer, sizeof(buffer));
+						n = read(fd, buffer, sizeof(buffer));
+						if(n <= 0){
+							printf("\tError receiving a message from a neighbour node!\n");
+							break;
+						}
+						
+						bzero(cmd, sizeof(cmd));
+						if((sscanf(buffer, "%s", cmd) == 1) && (strcmp(cmd, "ADVERTISE") == 0)){
+							// Update Expedition Table
+							new_table = (nodeinfo*)calloc(1, sizeof(nodeinfo));
+							sscanf(buffer, "%s %s", user_str, new_table->id);
+							new_table->fd = fd;
+							new_table->next = NULL;
+							errcode = table_in(head_table, new_table);
+							// Propagate the Message
+							new_table = head_table;
+							while(new_table != NULL){
+								if((new_table->fd != 0) && (new_table->fd != fd)){
+									n = write(fd, buffer, sizeof(buffer));
+									if(n <= 0){
+										printf("\tError sending message!\n");
+										break;
+									}
+								}
+								new_table = (nodeinfo*)new_table->next;
+							}
+						}
+						else break;
+						state = reg;
+					}
+					break;
 				case unreg:
 					if(FD_ISSET(0, &ready_sockets)){
 						FD_CLR(0, &ready_sockets);
 						if(fgets(user_str, 64, stdin)!= NULL){
-
+							bzero(cmd, sizeof(cmd));
 							if(sscanf(user_str, "%s", cmd) == 1){
 								cmd_code = get_cmd(cmd); // Get command code
 							}
@@ -259,7 +336,6 @@ int main(int argc, char **argv){
 												close(fd);
 												break;
 											}
-											printf("%s\n", backup_node.node_tcp);
 											// Self Advertise
 											bzero(buffer, sizeof(buffer));
 											sprintf(buffer, "ADVERTISE %s\n", nodeID);
@@ -432,7 +508,9 @@ int main(int argc, char **argv){
 									break;
 								}
 							}
+							aux_table = (nodeinfo*)aux_table->next;
 						}
+						state = busy;
 					}
 					break;
 

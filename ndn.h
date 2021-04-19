@@ -35,6 +35,7 @@ typedef struct Expedition{
 /* auxfunctions */
 int check_ip(char *full_ip);
 int get_cmd(char *cmd);
+int get_msg(char *msg);
 int val_number(char *str);
 int table_in(nodeinfo *head, nodeinfo *new);
 int table_out(nodeinfo *head, char *node_id);

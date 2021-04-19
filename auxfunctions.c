@@ -50,6 +50,11 @@ int get_cmd(char *cmd){
 	else return 0;
 }
 
+int get_msg(char *msg){
+  if(strcmp(msg, "ADVERTISE") == 0) return 1;
+  else return 0;
+}
+
 int val_number(char *str){
   while(*str){
     if(!isdigit(*str)) return 0;
@@ -106,7 +111,7 @@ int table_free(nodeinfo *head){
     aux1 = aux2;
     aux2 = (nodeinfo*)aux2->next;
   }
-  
+
   free(aux1);
   return -1;
 }
