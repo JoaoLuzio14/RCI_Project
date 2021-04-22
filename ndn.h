@@ -24,6 +24,7 @@
 typedef struct Node{
 	char node_ip[20];
 	char node_tcp[8];
+	int fd;
 }contact;
 
 typedef struct Expedition{
@@ -37,13 +38,13 @@ int check_ip(char *full_ip);
 int get_cmd(char *cmd);
 int get_msg(char *msg);
 int val_number(char *str);
-int table_in(nodeinfo *head, nodeinfo *new);
-int table_out(nodeinfo *head, char *node_id);
-int table_free(nodeinfo *head);
+nodeinfo *table_in(nodeinfo *head, nodeinfo *new);
+nodeinfo *table_out(nodeinfo *head, char *node_id);
+void table_free(nodeinfo *head);
 
 /* connectivity */
 int tcp_connection(char* bootIP, char* bootTCP);
 int regNODE(int regFLAG, char* net, char* nodeIP, char* nodeTCP, char* regIP, char* regUDP);
-int getEXT(char* net, char* regIP, char* regUDP, char* bootIP, char* bootTCP);
+int getEXT(char* net, char* regIP, char* regUDP, char* bootIP, char* bootTCP, char* nodeIP, char* nodeTCP, int reg);
 
 #endif // NDN_H_INCLUDED

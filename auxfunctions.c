@@ -18,7 +18,7 @@
 #include "ndn.h"
 
 int check_ip(char *full_ip){
-	int i, num, dots = 0;
+	int num, dots = 0;
   char *ptr, aux[20];
 
   if((full_ip[0] == '.') || (full_ip[strlen(full_ip)-1] == '.')) return 0;
@@ -52,6 +52,8 @@ int get_cmd(char *cmd){
 
 int get_msg(char *msg){
   if(strcmp(msg, "ADVERTISE") == 0) return 1;
+  if(strcmp(msg, "WITHDRAW") == 0) return 2;
+  if(strcmp(msg, "EXTERN") == 0) return 3; 
   else return 0;
 }
 
@@ -63,33 +65,36 @@ int val_number(char *str){
   return 1;
 }
 
-int table_in(nodeinfo *head, nodeinfo *new){
-  nodeinfo *aux1;
+nodeinfo *table_in(nodeinfo *head, nodeinfo *new){
+  nodeinfo *aux1, *aux2;
 
-  aux1 = (nodeinfo *)head;
-  while(aux1->next != NULL){
+  aux2 = (nodeinfo *)head;
+  aux1 = (nodeinfo *)head->next;
+  while(aux1 != NULL){
     if(strcmp(aux1->id , new->id) == 0){
       aux1->fd = new->fd;
       free(new);
-      return 1; // new fd related with the same node
+      return head; // new fd related with the same node
     }
     aux1 = (nodeinfo*) aux1->next;
+    aux2 = (nodeinfo*) aux2->next;
   } 
-  aux1->next = (struct nodeinfo *) new;
+  aux2->next = (struct nodeinfo *)new;
 
-  return 0;
+  return head;
 }
 
-int table_out(nodeinfo *head, char *node_id){
+nodeinfo *table_out(nodeinfo *head, char *node_id){
   nodeinfo *aux1, *aux2;
 
   aux1 = (nodeinfo *)head;
   aux2 = (nodeinfo *)aux1->next;
-  while(aux2->next != NULL){
+  if(aux2 == NULL) return head;
+  while(aux2 != NULL){
     if(strcmp(aux2->id, node_id) == 0){
       aux1->next = aux2->next;
       free(aux2);
-      return 0;
+      return head;
     }
     else{
       aux1 = (nodeinfo *)aux1->next;
@@ -97,22 +102,14 @@ int table_out(nodeinfo *head, char *node_id){
     }
   }
 
-  return -1;
+  return head;
 }
 
-int table_free(nodeinfo *head){
-  nodeinfo *aux1, *aux2;
- 
-  aux1 = (nodeinfo *)head;
-  if(aux1 != NULL) aux2 = (nodeinfo *)head->next;
-
-  while(aux1->next!=NULL){
-    if(aux1->fd != 0) close(aux1->fd);
-    free(aux1);
-    aux1 = aux2;
-    aux2 = (nodeinfo*)aux2->next;
+void table_free(nodeinfo *head){
+  nodeinfo* tmp;
+  while (head != NULL){
+    tmp = head;
+    head = (nodeinfo *)head->next;
+    free(tmp);
   }
-
-  free(aux1);
-  return -1;
 }

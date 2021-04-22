@@ -131,7 +131,7 @@ int regNODE(int regFLAG, char* net, char* nodeIP, char* nodeTCP, char* regIP, ch
 	exit(1);
 }
 
-int getEXT(char* net, char* regIP, char* regUDP, char* bootIP, char* bootTCP){
+int getEXT(char* net, char* regIP, char* regUDP, char* bootIP, char* bootTCP, char *nodeIP, char* nodeTCP, int reg){ //reg=1, unreg=0
 	
 	char str[BUFFERSIZE+1], buffer[BUFFERSIZE+1];
 	char matrix[BUFFERSIZE][BUFFERSIZE];
@@ -139,7 +139,7 @@ int getEXT(char* net, char* regIP, char* regUDP, char* bootIP, char* bootTCP){
 	struct addrinfo hints, *res;
 	struct sockaddr addr;
 	socklen_t addrlen;
-	int fd, cnt, errcode, i, r;
+	int fd, cnt, errcode, i, r, fixo;
 	char *token;
 	fd_set rfds;
 	struct timeval tv;
@@ -169,7 +169,6 @@ int getEXT(char* net, char* regIP, char* regUDP, char* bootIP, char* bootTCP){
    	n = sendto(fd, str, strlen(str), 0, res->ai_addr, res->ai_addrlen);
 	if(n == -1) exit(1);
 			
-
 	FD_ZERO(&rfds);
 	FD_SET(fd,&rfds);
 
@@ -199,18 +198,21 @@ int getEXT(char* net, char* regIP, char* regUDP, char* bootIP, char* bootTCP){
 		token = strtok(NULL, "\n");
 		i++;
 	}
-	r = rand() % i; 
-	if(r==0) r = 1;
+	fixo=i;
+	if(fixo == 2 && reg == 1) return 2;
 
-	token = strtok(matrix[r], " ");
-	i=0;
-	while(token != NULL){
-		if(i==0) strcpy(bootIP, token);
-		if(i==1) strcpy(bootTCP, token);
-		token = strtok(NULL, " ");
-		i++;
-	}
-
+	do{
+		r = rand() % fixo; 
+		if(r==0) r = 1;
+		token = strtok(matrix[r], " ");
+		i=0;
+		while(token != NULL){
+			if(i==0) strcpy(bootIP, token);
+			if(i==1) strcpy(bootTCP, token);
+			token = strtok(NULL, " ");
+			i++;
+		}
+	}while((strcmp(bootIP,nodeIP)==0) && (strcmp(bootTCP,nodeTCP)==0));	
 	/* Close UDP socket */
 	freeaddrinfo(res);
 	close(fd);
