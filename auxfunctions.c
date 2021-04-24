@@ -47,6 +47,11 @@ int get_cmd(char *cmd){
 	if(strcmp(cmd, "exit") == 0) return 3;
   if(strcmp(cmd, "st") == 0) return 4;
   if(strcmp(cmd, "sr") == 0) return 5;
+  if(strcmp(cmd, "sc") == 0) return 6;
+  if(strcmp(cmd, "create") == 0) return 7;
+  if(strcmp(cmd, "get") == 0) return 8;
+  if(strcmp(cmd, "so") == 0) return 9;
+  if(strcmp(cmd, "remove") == 0) return 10;
 	else return 0;
 }
 
@@ -54,6 +59,7 @@ int get_msg(char *msg){
   if(strcmp(msg, "ADVERTISE") == 0) return 1;
   if(strcmp(msg, "WITHDRAW") == 0) return 2;
   if(strcmp(msg, "EXTERN") == 0) return 3; 
+  if(strcmp(msg, "INTEREST") == 0) return 4;
   else return 0;
 }
 
@@ -112,4 +118,57 @@ void table_free(nodeinfo *head){
     head = (nodeinfo *)head->next;
     free(tmp);
   }
+}
+
+void cache_in(char cache[CACHESIZE][64], char *object){ // LIFO Regime
+  int i;
+  for(i = 0; i < CACHESIZE; i++){
+    if((cache[i][0] == '\0') || (strcmp(cache[i], object) == 0)){
+      strcpy(cache[i], object);
+      break;
+    }
+  }
+  if(i == CACHESIZE){
+    for(i = 0; i < (CACHESIZE-1); i++) strcpy(cache[i], cache[i+1]);
+    strcpy(cache[CACHESIZE - 1], object);
+  }
+}
+
+int name_split(char *name, char *id, char *subname){
+
+  char *token, *ptr, aux[64];
+
+  strcpy(aux, name);
+  ptr = &name[0];
+  while(*ptr != '\0'){
+    if(*ptr == '.') break;
+    ptr++;
+  }
+  if(*ptr == '\0'){
+    printf("\tInvalid command syntax. The object name must be specified as: 'id.subname'.\n");
+    return 1;
+  }
+  token = strtok(aux, ".");
+  strcpy(id, token);
+  token = strtok(NULL, "\0");
+  strcpy(subname, token);
+
+  return 0;
+}
+
+int writeTCP(int fd, char *buffer){
+
+  int l, res;
+  char *ptr;
+
+  ptr = &buffer[0];
+  l = strlen(buffer);
+
+  while(l > 0){
+    res = write(fd, ptr, l);
+    if(res <= 0) return res;
+    l-=res;
+    ptr += res;
+  }
+  return 1;
 }

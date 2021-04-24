@@ -23,7 +23,6 @@
 #define DEFAULT_HOST "tejo.tecnico.ulisboa.pt"
 #define DEFAULT_IP "193.136.138.142"
 #define DEFAULT_PORT "59000"
-#define BUFFERSIZE 1024
 
 int main(int argc, char **argv){
 
@@ -32,12 +31,12 @@ int main(int argc, char **argv){
 	char nodeIP[20], nodeTCP[20], regIP[20], regUDP[20], *token;
 	char matrix[BUFFERSIZE][BUFFERSIZE];
 	fd_set ready_sockets;
-	enum {unreg, reg, busy, getout, handle} state;
+	enum {unreg, reg, busy, getout, handle, waiting} state;
 	int maxfd, cntr;
 
 	/* User Interface Variables */
 	char user_str[64], cmd[64], net[64], nodeID[64], bootIP[64], bootTCP[64], except_id[64];
-	int fd, except_fd, aux_fd, cmd_code, counter, joined = 0;
+	int fd, except_fd, cmd_code, counter, joined = 0;
 	struct sockaddr addr_tcp;
 	socklen_t addrlen_tcp;
 	fd_set rfds;
@@ -55,6 +54,10 @@ int main(int argc, char **argv){
 	ssize_t n;
 	char buffer[128+1];
 	int fd_server;
+
+	/* Cache and Objects Manegement Variables */
+	char cache[CACHESIZE][64], obj[CACHESIZE][64], obj_id[64], obj_subname[64];
+	int waiting_fd;	
 
 	/* Argument Process */	
 	printf("\n");
@@ -93,15 +96,17 @@ int main(int argc, char **argv){
 		exit(1);
 	}
 
-	tv.tv_sec = 2;
+	tv.tv_sec = 3;
 	tv.tv_usec = 0;
 
 	printf("Arguments are valid.\n\n\n\n\n");
 
+	/* Vector Setting */
 	for(i = 0; i < 5; i++) intern[i].fd = 0;
+	for(i = 0; i < CACHESIZE; i++) cache[i][0] = '\0';
+	for(i = 0; i < CACHESIZE; i++) obj[i][0] = '\0';
 
 	/* TCP Server Connection */
-
 	if((fd_server=socket(AF_INET,SOCK_STREAM,0)) == -1) exit(1); //TCP type of socket
 
 	memset(&hints, 0, sizeof hints);
@@ -143,6 +148,10 @@ int main(int argc, char **argv){
 				FD_SET(fd, &ready_sockets);
 				maxfd = fd;
 				break;
+			case waiting:
+				FD_SET(fd, &ready_sockets);
+				maxfd = fd;	
+				break;
 			case reg: // Node fully operational
 				FD_SET(0, &ready_sockets);
 				FD_SET(fd_server, &ready_sockets);
@@ -162,32 +171,47 @@ int main(int argc, char **argv){
 				endFLAG = 1;
 				break;
 			case handle:
-				head_table = table_out(head_table, except_id); // Remove from expedition table
-				for(i = 0; i < 5; i++){
-					if(intern[i].fd == except_fd){
-						intern[i].fd = 0;
-						break;
+				if(except_id[0] == '\0'){
+					printf("\tUnexpected error! Aborting\n");
+					errcode = regNODE(0, net, nodeIP, nodeTCP, regIP, regUDP);
+					aux_table=head_table;
+					while(aux_table!=NULL){
+					   	if(aux_table->fd != 0) close(aux_table->fd);
+					   	aux_table = (nodeinfo *) aux_table->next;
 					}
+					table_free(head_table); // free expedition table
+					state = getout;
+					endFLAG = 1;
+					break;
 				}
-				// Remove all nodes related with except_fd
-				aux_table  = head_table;
-				while(aux_table != NULL){
-					if(aux_table->fd == except_fd){
-						head_table = table_out(head_table, aux_table->id); // Remove from expedition table
+				else{
+					head_table = table_out(head_table, except_id); // Remove from expedition table
+					for(i = 0; i < 5; i++){
+						if(intern[i].fd == except_fd){
+							intern[i].fd = 0;
+							break;
+						}
 					}
-					aux_table = (nodeinfo *)aux_table->next; 
-				}
-				// Propagate WITHDRAW
-				bzero(buffer, sizeof(buffer));
-				sprintf(buffer, "WITHDRAW %s\n", except_id);
-				new_table = (nodeinfo*)head_table->next;
-				while(new_table != NULL){
-					n = write(new_table->fd, buffer, sizeof(buffer));
-					if(n <= 0){
-						printf("\tError sending node info!\n");
-						break;
-					}					
-					new_table = (nodeinfo*)new_table->next;
+					// Remove all nodes related with except_fd
+					aux_table  = head_table;
+					while(aux_table != NULL){
+						if(aux_table->fd == except_fd){
+							head_table = table_out(head_table, aux_table->id); // Remove from expedition table
+						}
+						aux_table = (nodeinfo *)aux_table->next; 
+					}
+					// Propagate WITHDRAW
+					bzero(buffer, sizeof(buffer));
+					sprintf(buffer, "WITHDRAW %s\n", except_id);
+					new_table = (nodeinfo*)head_table->next;
+					while(new_table != NULL){
+						n = write(new_table->fd, buffer, sizeof(buffer));
+						if(n <= 0){
+							printf("\tError sending node info!\n");
+							break;
+						}					
+						new_table = (nodeinfo*)new_table->next;
+					}
 				}
 				if(except_fd == extern_node.fd){ // Node that left was external neighbour
 					// Connect to backup
@@ -320,6 +344,18 @@ int main(int argc, char **argv){
 			cntr = select(maxfd + 1, &ready_sockets, (fd_set *)NULL, (fd_set *)NULL, &tv);
 			if(cntr <= 0){
 				printf("\tError: Did not received advertise form internal neighbour!\n");
+				printf(">>> "); // Command Line Prompt
+				fflush(stdout);	
+				state = reg;
+				continue;
+			}
+		}
+		else if(state == waiting){
+			cntr = select(maxfd + 1, &ready_sockets, (fd_set *)NULL, (fd_set *)NULL, &tv);
+			if(cntr <= 0){
+				printf("\tError: Did not received information about searched object!\n");
+				printf(">>> "); // Command Line Prompt
+				fflush(stdout);	
 				state = reg;
 				continue;
 			}
@@ -380,7 +416,6 @@ int main(int argc, char **argv){
 								new_table->fd = aux_table->fd;
 								new_table->next = NULL;
 								head_table = table_in(head_table, new_table);
-								// Propagate the Message
 								new_table = head_table;
 								while(new_table != NULL){
 									if((new_table->fd != 0) && (new_table->fd != aux_table->fd)){
@@ -403,7 +438,6 @@ int main(int argc, char **argv){
 									}					
 									new_table = (nodeinfo*)new_table->next;
 								}
-								// Propagate the Message
 								new_table = head_table;
 								while(new_table != NULL){
 									if((new_table->fd != 0) && (new_table->fd != aux_table->fd)){
@@ -422,15 +456,82 @@ int main(int argc, char **argv){
 									printf("\tError getting backup node information.\n");
 								}
 								break;
-
+							case 4: // INTEREST
+								bzero(user_str, sizeof(user_str));
+					   			errcode = sscanf(buffer, "%s %s", cmd, user_str);
+					   			if(errcode != 2){
+					   				printf("\tInvalid message received (INTEREST).\n");
+					   				break;
+					   			}
+					   			cmd_code = 0;
+					   			if(name_split(user_str, obj_id, obj_subname) == 1) break;
+					   			if(strcmp(obj_id, nodeID) == 0){ // Node is the destiny
+					   				for(i = 0; i < CACHESIZE; i++){
+					   					if(strcmp(obj[i], user_str) == 0){
+					   						bzero(buffer, sizeof(buffer));
+					   						sprintf(buffer, "DATA %s\n", obj[i]);
+					   						n = write(aux_table->fd, buffer, sizeof(buffer));
+											if(n <= 0){
+												printf("\tError sending data message!\n");
+											}
+					   						break;
+					   					}
+					   				}
+					   				if(i == CACHESIZE){ 
+					   					bzero(buffer, sizeof(buffer));
+					   					sprintf(buffer, "NODATA %s\n", user_str);
+					   					n = write(aux_table->fd, buffer, sizeof(buffer));
+										if(n <= 0){
+											printf("\tError sending data message!\n");
+										}
+					   				}
+					   				cmd_code = -1;
+					   			}
+					   			else{ // Node is not the destiny
+					   				for(i = 0; i < CACHESIZE; i++){
+					   					if(strcmp(cache[i], user_str) == 0) break;
+					   				}
+					   				if(i != CACHESIZE){ // object is in cache
+					   					bzero(buffer, sizeof(buffer));
+					   					sprintf(buffer, "DATA %s\n", cache[i]);
+					   					n = write(aux_table->fd, buffer, sizeof(buffer));
+										if(n <= 0){
+											printf("\tError sending data message!\n");
+											break;
+										}
+										cmd_code = -1;
+					   				}
+					   				else{ // Send INTEREST Message
+					   					new_table = (nodeinfo *)head_table->next;
+						   				while(new_table != NULL){
+						   					if(strcmp(new_table->id, obj_id) == 0){
+						   						bzero(buffer, sizeof(buffer));
+					   							sprintf(buffer, "INTEREST %s\n", user_str);
+												n = write(new_table->fd, buffer, sizeof(buffer));
+												if(n <= 0){
+													printf("\tError sending interest message!\n");
+													break;
+												}
+												fd = new_table->fd;
+												waiting_fd = aux_table->fd;
+						   						state = waiting;						   						
+						   						break;
+						   					}
+						   					new_table = (nodeinfo *)new_table->next;
+						   				}
+					   				}
+					   			}
+								break;
 							default: // Unknown Message Received
 								break;
 						}
+						if((state == waiting) || (cmd_code == -1)) break;
 						i--;	
 					}
 				}
 				aux_table = (nodeinfo *)aux_table->next;
-			}		
+			}
+			if(state == waiting) continue;	
 		}
 		/* Server and User Messages Processing */
 		for(; cntr; --cntr){
@@ -442,9 +543,7 @@ int main(int argc, char **argv){
 						bzero(buffer, sizeof(buffer));
 						n = read(fd, buffer, sizeof(buffer));
 						if(n <= 0){
-							// printf("\tError receiving a message from a neighbour node!\n");
-							bzero(except_id, sizeof(except_id));
-							strcpy(except_id, aux_table->id);
+							except_id[0] = '\0';
 							except_fd = fd;
 							state = handle;
 							break;
@@ -454,7 +553,6 @@ int main(int argc, char **argv){
 				    	token = strtok(buffer, "\n");
 						while(token != NULL){
 							strcpy(matrix[i], token);
-							strcat(matrix[i], "\n");
 							token = strtok(NULL, "\n");
 							i++;
 					 	}
@@ -465,7 +563,7 @@ int main(int argc, char **argv){
 					 		strcpy(buffer, matrix[i]);
 
 							bzero(cmd, sizeof(cmd));
-							sscanf(buffer, "%s", cmd);
+							if(sscanf(buffer, "%s", cmd) != 1) continue;
 							if(strcmp(cmd, "ADVERTISE") == 0){							
 								// Update Expedition Table
 								new_table = (nodeinfo*)calloc(1, sizeof(nodeinfo));
@@ -486,37 +584,69 @@ int main(int argc, char **argv){
 									new_table = (nodeinfo*)new_table->next;
 								}
 							}
-							else if(strcmp(cmd, "WITHDRAW") == 0){
-								aux_fd = -1;
-								sscanf(buffer, "%s %s", user_str, except_id);
-								new_table = head_table;
-								while(new_table != NULL){
-									if(strcmp(new_table->id, except_id) == 0){
-										aux_fd = new_table->fd;
-										head_table = table_out(head_table, new_table->id);
-										new_table = head_table;
-									}
-									else if(new_table->fd == aux_fd) new_table->fd = fd;						
-									new_table = (nodeinfo*)new_table->next;
-								}
-								// Propagate the Message
-								new_table = head_table;
-								while(new_table != NULL){
-									if((new_table->fd != 0) && (new_table->fd != fd)){
-										n = write(fd, buffer, sizeof(buffer));
-										if(n <= 0){
-											printf("\tError sending message!\n");
-											break;
-										}
-									}
-									new_table = (nodeinfo*)new_table->next;
-								}
-							}
 							else{
-								printf("\tInvalid message received when node was updating!\n");
-								break;
+								printf("\tInvalid message received when node was establishing a connection!\n");
+								continue;
 							}
 							i--;
+						}
+						state = reg;
+					}
+					break;
+				case waiting:
+					if(FD_ISSET(fd, &ready_sockets)){
+						FD_CLR(fd, &ready_sockets);
+
+						bzero(buffer, sizeof(buffer));
+						n = read(fd, buffer, sizeof(buffer));
+						if(n <= 0){
+							printf("\tError receiving message (data)!\n");
+							state = reg;
+							printf(">>> "); // Command Line Prompt
+							fflush(stdout);	
+							break;
+						}
+
+						bzero(cmd, sizeof(cmd));
+						bzero(user_str, sizeof(user_str));
+						if(sscanf(buffer, "%s %s", cmd, user_str) != 2) printf("\tWrong object message received!\n");
+						if(name_split(user_str, obj_id, obj_subname) == 1){
+							if(waiting_fd != 0){
+								n = write(waiting_fd, buffer, sizeof(buffer));
+								if(n <= 0) printf("\tError sending message!\n");
+							}
+							else printf("\tWrong message received about object named %s.\n", obj_subname);
+							printf(">>> "); // Command Line Prompt
+							fflush(stdout);	
+							state = reg;
+							break;
+						}
+						else if(strcmp(cmd, "DATA") == 0){
+							cache_in(cache, user_str); // Cache LIFO
+							if(waiting_fd != 0){
+								n = write(waiting_fd, buffer, sizeof(buffer));
+								if(n <= 0) printf("\tError sending message!\n");
+							}
+							else printf("\tObject named %s was found successfully and is stored in cache!\n", obj_subname);
+						}
+						else if(strcmp(cmd, "NODATA") == 0){
+							if(waiting_fd != 0){
+								n = write(waiting_fd, buffer, sizeof(buffer));
+								if(n <= 0) printf("\tError sending message!\n");
+							}
+							else printf("\tCould't find the object named %s.\n", obj_subname);
+						}
+						else{
+							printf("\tWrong object message received!\n");
+							if(waiting_fd != 0){
+								n = write(waiting_fd, buffer, sizeof(buffer));
+								if(n <= 0) printf("\tError sending message!\n");
+							}
+							else printf("\tWrong message received about object named %s.\n", obj_subname);
+						}
+						if(waiting_fd == 0){
+							printf(">>> "); // Command Line Prompt
+							fflush(stdout);	
 						}
 						state = reg;
 					}
@@ -555,11 +685,11 @@ int main(int argc, char **argv){
 						   				}
 						   				if(errcode == 5){ // Direct Join
 						   					if(check_ip(bootIP) == 0){
-												printf("Error in IP format verification.\n");
+												printf("\tError in IP format verification.\n");
 												break;
 											}
 											if((atoi(bootTCP) < 0) || (atoi(bootTCP) > 65535)){
-												printf("Error specifying TCP port.\n");
+												printf("\tError specifying TCP port.\n");
 												break;
 											}
 						   				}
@@ -619,7 +749,15 @@ int main(int argc, char **argv){
 
 										// Register Node in Node Server
 					   					joined = regNODE(1, net, nodeIP, nodeTCP, regIP, regUDP);
-					   					if(joined == 0) break;
+					   					if((joined == 0) || (joined == -1)){
+					   						extern_node.node_ip[0] = '\0';
+					   						extern_node.fd = 0;
+					   						free(head_table);
+					   						head_table = (nodeinfo *)NULL;
+					   						close(fd);
+					   						joined = 0;
+					   						break;
+					   					}
 					   					else if(joined == 1){
 					   						if(extern_node.node_ip[0] != '\0') state = busy;
 					   						else state = reg;
@@ -648,7 +786,7 @@ int main(int argc, char **argv){
 					if(FD_ISSET(0, &ready_sockets)){				
 						FD_CLR(0, &ready_sockets);
 						if(fgets(user_str, 64, stdin)!= NULL){
-
+							bzero(cmd, sizeof(cmd));
 							if(sscanf(user_str, "%s", cmd) == 1){
 								cmd_code = get_cmd(cmd); // Get command code
 							}
@@ -678,12 +816,15 @@ int main(int argc, char **argv){
 					   				table_free(head_table); // free expedition table
 					   				head_table = (nodeinfo *)NULL;
 					   				for(i = 0; i < 5; i++) intern[i].fd = 0; // reset ineternal neighbour vector
+					   				for(i = 0; i < CACHESIZE; i++) cache[i][0] = '\0'; // reset cache data
+									for(i = 0; i < CACHESIZE; i++) obj[i][0] = '\0'; // reset objects list
 					   				extern_node.node_ip[0] = '\0';
 									extern_node.node_tcp[0] = '\0';
 									extern_node.fd = 0;
 									backup_node.node_ip[0] = '\0';
 									backup_node.node_tcp[0] = '\0';
 
+									memset(nodeID, '\0', sizeof(nodeID));
 					   				memset(net, '\0', sizeof(net));
 					   				break;
 
@@ -720,16 +861,130 @@ int main(int argc, char **argv){
 					   				printf("\tEXPEDITION TABLE:\n");
 					   				aux_table = head_table;
 									while(aux_table != NULL){
-										printf("\tID:%s\tfd:%d\n", aux_table->id, aux_table->fd);
+										if(aux_table->fd == 0) printf("\tID:%s\tfd:-\n", aux_table->id);
+										else printf("\tID:%s\tfd:%d\n", aux_table->id, aux_table->fd);
 										aux_table = (nodeinfo *)aux_table->next;
 									}		
+					   				break;
+
+					   			case 6: // show cache
+					   				if(cache[0][0] == '\0'){
+					   					printf("\tCache is empty!\n");
+					   				}
+					   				else{
+					   					printf("\tCACHE CONTENT\n");
+					   					for(i = 0; i < CACHESIZE; i++){
+					   						if(cache[i][0] != '\0') printf("\t%d: %s\n", i+1, cache[i]);
+					   					}
+					   				}
+					   				break;
+
+					   			case 7: // create
+					   				memset(buffer, '\0', sizeof(buffer));
+					   				errcode = sscanf(user_str, "%s %s", cmd, obj_subname);
+					   				if(errcode != 2){
+					   					printf("\tInvalid command syntax. The ideal executable command is: 'get id.subname'.\n");
+					   					break;
+					   				}
+					   				strcpy(buffer, nodeID);
+					   				strcat(buffer, ".");
+					   				strcat(buffer, obj_subname);
+					   				for(i = 0; i < CACHESIZE; i++){
+					   					if(obj[i][0] == '\0'){
+					   						strcpy(obj[i], buffer);
+					   						break;
+					   					}
+					   				}
+					   				if(i == CACHESIZE) printf("\tNode can't have more objects! Try to remove an existing one.\n");
+					   				else printf("\tObject %s added with success.\n", obj_subname);
+					   				break;
+
+					   			case 8: // get 
+					   				bzero(buffer, sizeof(buffer));
+					   				errcode = sscanf(user_str, "%s %s", cmd, buffer);
+					   				if(errcode != 2){
+					   					printf("\tInvalid command syntax. The ideal executable command is: 'get id.subname'.\n");
+					   					break;
+					   				}
+					   				bzero(obj_id, sizeof(obj_id));
+					   				bzero(obj_subname, sizeof(obj_subname));
+					   				if(name_split(buffer, obj_id, obj_subname) == 1) break;
+					   				if(strcmp(obj_id, nodeID) == 0){
+					   					for(i = 0; i < CACHESIZE; i++){
+					   						if(strcmp(obj[i], buffer) == 0){
+					   							printf("\tThe node as an object called %s!\n", obj_subname);
+					   							break;
+					   						}
+					   					}
+					   					if(i == CACHESIZE) printf("\tThe node does not have an object called %s.\n", obj_subname);
+					   				}
+					   				else{
+					   					aux_table = (nodeinfo *)head_table->next;
+					   					while(aux_table != NULL){
+					   						if(strcmp(aux_table->id, obj_id) == 0){
+												bzero(user_str, sizeof(user_str));
+												sprintf(user_str, "INTEREST %s\n", buffer);
+												n = write(aux_table->fd, user_str, sizeof(buffer));
+												if(n <= 0){
+													printf("\tError sending interest message!\n");
+													break;
+												}
+												fd = aux_table->fd;
+												waiting_fd = 0;
+					   							state = waiting;
+					   							break;
+					   						}
+					   						aux_table = (nodeinfo *)aux_table->next;
+					   					}
+					   					if(state != waiting) printf("\tNode with id %s is not present in the net!\n", obj_id);
+					   				}
+					   				break;
+
+					   			case 9: // show objects
+					   				for(i = 0; i < CACHESIZE; i++){
+						   				if(obj[i][0] != '\0') break;
+						   			}
+						   			if(i == CACHESIZE){
+						   				printf("\tNo Objects Added!\n");
+						   			}
+						   			else{
+						   				printf("\tOBJECTS LIST\n");
+						   				for(i = 0; i < CACHESIZE; i++){
+						   					if(obj[i][0] != '\0'){
+						   						name_split(obj[i], obj_id, obj_subname);
+						   						printf("\t%d: %s\n", i+1, obj_subname);
+						   						bzero(obj_subname, sizeof(obj_subname));
+						   					}
+						   				}
+						   			}
+					   				break;
+
+					   			case 10: // remove
+					   				bzero(obj_subname, sizeof(obj_subname));
+					   				errcode = sscanf(user_str, "%s %s", cmd, obj_subname);
+					   				if(errcode != 2){
+					   					printf("\tInvalid command syntax. The ideal executable command is: 'remove subname'.\n");
+					   					break;
+					   				}
+					   				bzero(buffer, sizeof(buffer));
+					   				strcpy(buffer, nodeID);
+					   				strcat(buffer, ".");
+					   				strcat(buffer, obj_subname);
+					   				for(i = 0; i < CACHESIZE; i++){
+					   					if(strcmp(obj[i], buffer) == 0){
+					   						obj[i][0] = '\0';
+					   						printf("\tObject %s was removed with success.\n", obj_subname);
+					   						break;
+					   					}
+					   				}
+					   				if(i == CACHESIZE) printf("\tObject %s does not ehxist.\n", obj_subname);
 					   				break;
 
 					   			default:
 					   				printf("\tNode already joined a net!\n");
 					   				break;
 					   		}	
-					   		if(state != getout){
+					   		if((state != getout) && (state != waiting)){
 					   			printf(">>> "); // Command Line Prompt
 								fflush(stdout);			
 					   		}	
@@ -811,10 +1066,9 @@ int main(int argc, char **argv){
 				default: // Do nothing
    					break;
 			}
+			if((state == waiting) || (state == busy)) break;
 		}
 	}
-
-
 	freeaddrinfo(res);
 	close(fd_server);
 	exit(0);

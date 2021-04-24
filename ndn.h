@@ -21,6 +21,9 @@
 #include <signal.h>
 #include <errno.h>
 
+#define CACHESIZE 5
+#define BUFFERSIZE 1024
+
 typedef struct Node{
 	char node_ip[20];
 	char node_tcp[8];
@@ -41,6 +44,9 @@ int val_number(char *str);
 nodeinfo *table_in(nodeinfo *head, nodeinfo *new);
 nodeinfo *table_out(nodeinfo *head, char *node_id);
 void table_free(nodeinfo *head);
+void cache_in(char cache[CACHESIZE][64], char *object);
+int name_split(char *name, char *id, char *subname);
+int writeTCP(int fd, char *buffer);
 
 /* connectivity */
 int tcp_connection(char* bootIP, char* bootTCP);
