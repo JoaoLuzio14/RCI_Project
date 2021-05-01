@@ -76,11 +76,15 @@ nodeinfo *table_in(nodeinfo *head, nodeinfo *new){
 
   aux2 = (nodeinfo *)head;
   aux1 = (nodeinfo *)head->next;
+  if(strcmp(aux2->id, new->id) == 0){
+    free(new);
+    return head; 
+  }
   while(aux1 != NULL){
     if(strcmp(aux1->id , new->id) == 0){
       aux1->fd = new->fd;
       free(new);
-      return head; // new fd related with the same node
+      return head;
     }
     aux1 = (nodeinfo*) aux1->next;
     aux2 = (nodeinfo*) aux2->next;
@@ -156,7 +160,7 @@ int name_split(char *name, char *id, char *subname){
   return 0;
 }
 
-int writeTCP(int fd, char *buffer){
+int writeTCP(int fd, char *buffer){ // Writes to TCP connection socket
 
   int l, res;
   char *ptr;
@@ -172,31 +176,18 @@ int writeTCP(int fd, char *buffer){
   return 1;
 }
 
-int readTCP(int fd, char *buffer){
+int readTCP(int fd, char *buffer){ // Reads from TCP connection socket
 
-  int i, res, flag = 0;
+  int res;
   char *ptr;
 
   ptr = &buffer[0];
   while(1){
     res = read(fd, ptr, sizeof(buffer));
+    ptr += res-1;
     if(res <= 0) return res;
-    for(i = 1; i <= res; i++){
-      if(*ptr == '\n'){
-        flag = 1;
-        if(i != res) ptr++;
-        break;
-      }
-      else if(*ptr == '\0'){
-        flag = 2;
-        break;
-      }
-      ptr++;
-    }
-    if((*ptr == '\0') && (flag == 1)) break;
-    else if(flag == 2) break;
-    else flag = 0;
+    else if(*ptr == '\n') break;
+    ptr++;
   }
-  printf("%s\n", buffer);
   return 1;
 }

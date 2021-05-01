@@ -133,7 +133,7 @@ int main(int argc, char **argv){
 	act.sa_handler=SIG_IGN;
 	if(sigaction(SIGPIPE,&act,NULL)==-1) exit(1);
 	// Command Line Prompt
-	printf("Node Interface:\n");
+	printf("\tNode Interface\n\n");
 	printf(">>> ");
 	fflush(stdout);
 
@@ -185,33 +185,32 @@ int main(int argc, char **argv){
 					break;
 				}
 				else{
-					head_table = table_out(head_table, except_id); // Remove from expedition table
-					for(i = 0; i < 5; i++){
+					for(i = 0; i < 5; i++){ // Remove internal neighbour
 						if(intern[i].fd == except_fd){
 							intern[i].fd = 0;
 							break;
 						}
 					}
-					// Remove all nodes related with except_fd
-					aux_table  = head_table;
-					while(aux_table != NULL){
+					aux_table = head_table;
+					while(aux_table != NULL){ // Remove all nodes related with except_fd
 						if(aux_table->fd == except_fd){
+							bzero(buffer, sizeof(buffer));
+							sprintf(buffer, "WITHDRAW %s\n", aux_table->id);
 							head_table = table_out(head_table, aux_table->id); // Remove from expedition table
+							new_table = (nodeinfo*)head_table->next;
+							while(new_table != NULL){
+								if(new_table->fd != except_fd){
+									n = writeTCP(new_table->fd, buffer);
+									if(n <= 0){
+										printf("\tError sending withdraw!\n");
+										break;
+									}
+								}
+								new_table = (nodeinfo*)new_table->next;
+							}
 							aux_table = head_table;
 						}
 						aux_table = (nodeinfo *)aux_table->next;
-					}
-					// Propagate WITHDRAW
-					bzero(buffer, sizeof(buffer));
-					sprintf(buffer, "WITHDRAW %s\n", except_id);
-					new_table = (nodeinfo*)head_table->next;
-					while(new_table != NULL){
-						n = write(new_table->fd, buffer, sizeof(buffer));
-						if(n <= 0){
-							printf("\tError sending node info!\n");
-							break;
-						}
-						new_table = (nodeinfo*)new_table->next;
 					}
 				}
 				if(except_fd == extern_node.fd){ // Node that left was external neighbour
@@ -390,11 +389,11 @@ int main(int argc, char **argv){
 					cntr--;
 
 					bzero(buffer, sizeof(buffer));
-					n = read(aux_table->fd, buffer, sizeof(buffer));
+					n = readTCP(aux_table->fd, buffer);
 					if(n <= 0){
 						except_fd = aux_table->fd;
 						bzero(except_id, sizeof(except_id));
-						strcpy(except_id, aux_table->id);
+						strcpy(except_id, "empty");
 						state = handle;
 						break;
 					}
@@ -538,6 +537,7 @@ int main(int argc, char **argv){
 						i--;
 					}
 				}
+				for(i = 0; i < BUFFERSIZE; i++) bzero(matrix[i], sizeof(BUFFERSIZE));
 				aux_table = (nodeinfo *)aux_table->next;
 			}
 			if(state == waiting) continue;
@@ -550,7 +550,7 @@ int main(int argc, char **argv){
 						FD_CLR(fd, &ready_sockets);
 
 						bzero(buffer, sizeof(buffer));
-						n = read(fd, buffer, sizeof(buffer));
+						n = readTCP(fd, buffer);
 						if(n <= 0){
 							except_id[0] = '\0';
 							except_fd = fd;
@@ -592,6 +592,19 @@ int main(int argc, char **argv){
 									}
 									new_table = (nodeinfo*)new_table->next;
 								}
+								aux_table = head_table;
+								while(aux_table != NULL){ // send new connection my expedition table
+									if(aux_table->fd != fd){
+										bzero(buffer, sizeof(buffer));
+										sprintf(buffer, "ADVERTISE %s\n", aux_table->id);
+										n = writeTCP(fd, buffer);
+										if(n <= 0){
+											printf("\tError sending expedition table!\n");
+											break;
+										}
+									}
+									aux_table = (nodeinfo*)aux_table->next;
+								}
 							}
 							else{
 								if(aloneFLAG == 0){
@@ -606,6 +619,7 @@ int main(int argc, char **argv){
 							}
 							i--;
 						}
+						for(i = 0; i < BUFFERSIZE; i++) bzero(matrix[i], sizeof(BUFFERSIZE));
 						state = reg;
 					}
 					break;
@@ -628,7 +642,7 @@ int main(int argc, char **argv){
 						if(sscanf(buffer, "%s %s", cmd, user_str) != 2) printf("\tWrong object message received!\n");
 						if(name_split(user_str, obj_id, obj_subname) == 1){
 							if(waiting_fd != 0){
-								n = write(waiting_fd, buffer, sizeof(buffer));
+								n = writeTCP(waiting_fd, buffer);
 								if(n <= 0) printf("\tError sending message!\n");
 							}
 							else printf("\tWrong message received about object named %s.\n", obj_subname);
@@ -640,14 +654,14 @@ int main(int argc, char **argv){
 						else if(strcmp(cmd, "DATA") == 0){
 							cache_in(cache, user_str); // Cache LIFO
 							if(waiting_fd != 0){
-								n = write(waiting_fd, buffer, sizeof(buffer));
+								n = writeTCP(waiting_fd, buffer);
 								if(n <= 0) printf("\tError sending message!\n");
 							}
 							else printf("\tObject named %s was found successfully and is stored in cache!\n", obj_subname);
 						}
 						else if(strcmp(cmd, "NODATA") == 0){
 							if(waiting_fd != 0){
-								n = write(waiting_fd, buffer, sizeof(buffer));
+								n = writeTCP(waiting_fd, buffer);
 								if(n <= 0) printf("\tError sending message!\n");
 							}
 							else printf("\tCould't find the object named %s.\n", obj_subname);
@@ -655,7 +669,7 @@ int main(int argc, char **argv){
 						else{
 							printf("\tWrong object message received!\n");
 							if(waiting_fd != 0){
-								n = write(waiting_fd, buffer, sizeof(buffer));
+								n = writeTCP(waiting_fd, buffer);
 								if(n <= 0) printf("\tError sending message!\n");
 							}
 							else printf("\tWrong message received about object named %s.\n", obj_subname);
@@ -719,7 +733,7 @@ int main(int argc, char **argv){
 											// Send Self Info to External
 											bzero(buffer, sizeof(buffer));
 											sprintf(buffer, "NEW %s %s\n", nodeIP, nodeTCP);
-											n = write(fd, buffer, sizeof(buffer));
+											n = writeTCP(fd, buffer);
 											if(n <= 0){
 												printf("\tError sending node info!\n");
 												break;
@@ -735,7 +749,7 @@ int main(int argc, char **argv){
 												break;
 											}
 											bzero(buffer, sizeof(buffer));
-											n = read(fd, buffer, sizeof(buffer));
+											n = readTCP(fd, buffer);
 											if(n <= 0){
 												printf("\tError receiving node info!\n");
 												break;
@@ -1058,22 +1072,10 @@ int main(int argc, char **argv){
 
 						bzero(buffer, sizeof(buffer));
 						sprintf(buffer, "EXTERN %s %s\n", extern_node.node_ip, extern_node.node_tcp);
-						n = write(fd, buffer, sizeof(buffer));
+						n = writeTCP(fd, buffer);
 						if(n <= 0){
 							printf("\tError sending node info!\n");
 							break;
-						}
-						// send new connection my expedition table
-						aux_table = head_table;
-						while(aux_table != NULL){
-								bzero(buffer, sizeof(buffer));
-								sprintf(buffer, "ADVERTISE %s\n", aux_table->id);
-								n = write(fd, buffer, sizeof(buffer));
-								if(n <= 0){
-									printf("\tError sending expedition table!\n");
-									break;
-								}
-							aux_table = (nodeinfo*)aux_table->next;
 						}
 						state = busy;
 					}
