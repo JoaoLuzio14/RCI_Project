@@ -144,6 +144,10 @@ int name_split(char *name, char *id, char *subname){
 
   strcpy(aux, name);
   ptr = &name[0];
+  if(*ptr == '.'){
+    printf("\tInvalid command syntax. The object name must be specified as: 'id.subname'.\n");
+    return 1;
+  }
   while(*ptr != '\0'){
     if(*ptr == '.') break;
     ptr++;

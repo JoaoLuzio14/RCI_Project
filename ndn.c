@@ -200,7 +200,7 @@ int main(int argc, char **argv){
 							new_table = (nodeinfo*)head_table->next;
 							while(new_table != NULL){
 								if(new_table->fd != except_fd){
-									n = writeTCP(new_table->fd, buffer);
+									n = write(new_table->fd, buffer, sizeof(buffer));
 									if(n <= 0){
 										printf("\tError sending withdraw!\n");
 										break;
@@ -389,7 +389,7 @@ int main(int argc, char **argv){
 					cntr--;
 
 					bzero(buffer, sizeof(buffer));
-					n = readTCP(aux_table->fd, buffer);
+					n = read(aux_table->fd, buffer, sizeof(buffer));
 					if(n <= 0){
 						except_fd = aux_table->fd;
 						bzero(except_id, sizeof(except_id));
@@ -550,7 +550,7 @@ int main(int argc, char **argv){
 						FD_CLR(fd, &ready_sockets);
 
 						bzero(buffer, sizeof(buffer));
-						n = readTCP(fd, buffer);
+						n = read(fd, buffer, sizeof(buffer));
 						if(n <= 0){
 							except_id[0] = '\0';
 							except_fd = fd;
@@ -597,7 +597,7 @@ int main(int argc, char **argv){
 									if(aux_table->fd != fd){
 										bzero(buffer, sizeof(buffer));
 										sprintf(buffer, "ADVERTISE %s\n", aux_table->id);
-										n = writeTCP(fd, buffer);
+										n = write(fd, buffer, sizeof(buffer));
 										if(n <= 0){
 											printf("\tError sending expedition table!\n");
 											break;
@@ -642,7 +642,7 @@ int main(int argc, char **argv){
 						if(sscanf(buffer, "%s %s", cmd, user_str) != 2) printf("\tWrong object message received!\n");
 						if(name_split(user_str, obj_id, obj_subname) == 1){
 							if(waiting_fd != 0){
-								n = writeTCP(waiting_fd, buffer);
+								n = write(waiting_fd, buffer, sizeof(buffer));
 								if(n <= 0) printf("\tError sending message!\n");
 							}
 							else printf("\tWrong message received about object named %s.\n", obj_subname);
@@ -654,14 +654,14 @@ int main(int argc, char **argv){
 						else if(strcmp(cmd, "DATA") == 0){
 							cache_in(cache, user_str); // Cache LIFO
 							if(waiting_fd != 0){
-								n = writeTCP(waiting_fd, buffer);
+								n = write(waiting_fd, buffer, sizeof(buffer));
 								if(n <= 0) printf("\tError sending message!\n");
 							}
 							else printf("\tObject named %s was found successfully and is stored in cache!\n", obj_subname);
 						}
 						else if(strcmp(cmd, "NODATA") == 0){
 							if(waiting_fd != 0){
-								n = writeTCP(waiting_fd, buffer);
+								n = write(waiting_fd, buffer, sizeof(buffer));
 								if(n <= 0) printf("\tError sending message!\n");
 							}
 							else printf("\tCould't find the object named %s.\n", obj_subname);
@@ -669,7 +669,7 @@ int main(int argc, char **argv){
 						else{
 							printf("\tWrong object message received!\n");
 							if(waiting_fd != 0){
-								n = writeTCP(waiting_fd, buffer);
+								n = write(waiting_fd, buffer, sizeof(buffer));
 								if(n <= 0) printf("\tError sending message!\n");
 							}
 							else printf("\tWrong message received about object named %s.\n", obj_subname);
@@ -733,7 +733,7 @@ int main(int argc, char **argv){
 											// Send Self Info to External
 											bzero(buffer, sizeof(buffer));
 											sprintf(buffer, "NEW %s %s\n", nodeIP, nodeTCP);
-											n = writeTCP(fd, buffer);
+											n = write(fd, buffer, sizeof(buffer));
 											if(n <= 0){
 												printf("\tError sending node info!\n");
 												break;
@@ -749,7 +749,7 @@ int main(int argc, char **argv){
 												break;
 											}
 											bzero(buffer, sizeof(buffer));
-											n = readTCP(fd, buffer);
+											n = read(fd, buffer, sizeof(buffer));
 											if(n <= 0){
 												printf("\tError receiving node info!\n");
 												break;
@@ -765,7 +765,7 @@ int main(int argc, char **argv){
 											// Self Advertise
 											bzero(buffer, sizeof(buffer));
 											sprintf(buffer, "ADVERTISE %s\n", nodeID);
-											n = writeTCP(fd, buffer);
+											n = write(fd, buffer, sizeof(buffer));
 											if(n <= 0){
 												printf("\tError sending node info!\n");
 												break;
@@ -933,7 +933,7 @@ int main(int argc, char **argv){
 
 					   			case 8: // get
 					   				bzero(buffer, sizeof(buffer));
-					   				errcode = sscanf(user_str, "%s %s", cmd, buffer);
+					   				errcode = sscanf(user_str, "%s %s %s", cmd, buffer, extra);
 					   				if(errcode != 2){
 					   					printf("\tInvalid command syntax. The ideal executable command is: 'get id.subname'.\n");
 					   					break;
@@ -1072,7 +1072,7 @@ int main(int argc, char **argv){
 
 						bzero(buffer, sizeof(buffer));
 						sprintf(buffer, "EXTERN %s %s\n", extern_node.node_ip, extern_node.node_tcp);
-						n = writeTCP(fd, buffer);
+						n = write(fd, buffer, sizeof(buffer));
 						if(n <= 0){
 							printf("\tError sending node info!\n");
 							break;
